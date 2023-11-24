@@ -1,7 +1,9 @@
 ## Description
 Small, bash-only, interactive script using the 'kill' builtin that allows 
 for sending signals to processes matched against a given regex pattern. 
-Just as well, you may list the environment of the matching/selected processes. 
+Just as well, you may list the environment of the matching/selected processes.
+Please note, when list the envrionment of a process, the variable 'LS_COLORS'
+is removed for the sake of visual brevity.
 
 ## Usage
 Simply make `Kill` executable with `chmod +x Kill` place it in you path, and 
