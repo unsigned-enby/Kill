@@ -12,10 +12,11 @@ done
 declare -r SIG_SPECS
 help() {
    echo "Kill [-s [sigspec]] [-n [signum]] [-p <pattern>] [-h]"
-   echo "   -s [sigspec] : Use the given [sigspec] or select from a list of possible choices"
-   echo "   -n [signum]  : Use the given [signum] or select from a list of possible choices"
+   echo "   -s [sigspec] : Use the given [sigspec] or select from a list of possible sigspecs"
+   echo "   -n [signum]  : Use the given [signum] or select from a list of possible sigspecs"
    echo "   -p <patern>  : Search for regex pattern <pattern>. If -p is not given, then"
    echo "                  you will be prompted for the pattern"
+   echo "   -e           : Set initial action to procEnv (i.e list process environment"
    echo "   -h           : Show this help"
    exit 0
 }
@@ -60,7 +61,7 @@ setSig() {
    select SIG_SPEC in "${SIG_SPECS[@]}"; do break ; done
    NEXT_ACTION="kill -${SIG_SPEC} "
 }
-while getopts ':hn:s:p:' opt; do
+while getopts ':s:n:p:eh' opt; do
    # make getopts handle optional arguments
    if [[ $opt == ':' ]]; then 
       opt="$OPTARG"
@@ -70,9 +71,6 @@ while getopts ':hn:s:p:' opt; do
       unset OPTARG
    fi
    case "$opt" in
-      h)
-         helpMe
-         ;;
       s)
          if [[ -z $OPTARG ]]; then
             setSig
@@ -89,6 +87,12 @@ while getopts ':hn:s:p:' opt; do
          ;;
       p)
          PAT="$OPTARG"
+         ;;
+      e)
+         NEXT_ACTION="procEnv "
+         ;;
+      h)
+         help
          ;;
    esac
 done
