@@ -60,7 +60,7 @@ setSig() {
    select SIG_SPEC in "${SIG_SPECS[@]}"; do break ; done
    NEXT_ACTION="kill -${SIG_SPEC} "
 }
-while getopts ':hn:s:f' opt; do
+while getopts ':hn:s:p:' opt; do
    # make getopts handle optional arguments
    if [[ $opt == ':' ]]; then 
       opt="$OPTARG"
