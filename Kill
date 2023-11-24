@@ -1,0 +1,147 @@
+#!/bin/bash
+PS3='>>> '
+NEXT_ACTION="kill -TERM "
+PAT=""
+declare -a SIG_SPECS
+#get a list of signal specs
+for spec in $(kill -l); do
+   [[ $spec =~ "SIG" ]] || continue
+   [[ ${#SIG_SPECS[@]} == 31 ]] && SIG_SPECS+=("JUNK" "JUNK")
+   SIG_SPECS+=("$spec")
+done
+declare -r SIG_SPECS
+help() {
+   echo "Kill [-s [sigspec]] [-n [signum]] [-p <pattern>] [-h]"
+   echo "   -s [sigspec] : Use the given [sigspec] or select from a list of possible choices"
+   echo "   -n [signum]  : Use the given [signum] or select from a list of possible choices"
+   echo "   -p <patern>  : Search for regex pattern <pattern>. If -p is not given, then"
+   echo "                  you will be prompted for the pattern"
+   echo "   -h           : Show this help"
+   exit 0
+}
+setPat() {
+   read -r -p "PAT: " PAT
+}
+matchProcs() {
+   unset PROC_IDS
+   for proc in /proc/[0-9]*; do
+      # use mapfile to split the contents as bash does not 
+      # allow for strings to contain null bytes
+      2>/dev/null mapfile -d $'\x0' <"$proc/cmdline" TMP
+      if [[ ${TMP[*]} =~ $PAT ]]; then
+         PROC_IDS+=("${proc#/proc/} ${TMP[*]}")
+      fi
+   done
+   #for((i=0; i<${#procs[@]}; i++)); do
+   #   procs[i]="${procs[i]%/cmdline}"
+   #   procs[i]="${procs[i]#/proc/}"
+   #done
+   #unset "procs[i]"
+   #for p in "${PROC_IDS[@]}"; do
+   #   echo "$p"
+   #done
+}
+procEnv() {
+   declare -a ENV
+   mapfile -d $'\x0' </proc/"$1"/environ ENV
+   # Remove `LS_COLORS` as it is visually distracting 
+   # and typically does not provide useful info
+   for((i=0; i<${#ENV[@]}; i++)); do
+      if [[ ${ENV[i]} =~ 'LS_COLORS' ]]; then
+         unset "ENV[i]"
+         break
+      fi
+   done
+   printf '%s\n' "${ENV[@]}"
+}
+setSig() {
+   local TITLE='Sig spec selection'
+   printf '\E[1;4m%s\E[0m\n' "${TITLE}"
+   select SIG_SPEC in "${SIG_SPECS[@]}"; do break ; done
+   NEXT_ACTION="kill -${SIG_SPEC} "
+}
+while getopts ':hn:s:f' opt; do
+   # make getopts handle optional arguments
+   if [[ $opt == ':' ]]; then 
+      opt="$OPTARG"
+      unset OPTARG
+   elif [[ $OPTARG =~ ^- ]]; then       
+      ((OPTIND--))
+      unset OPTARG
+   fi
+   case "$opt" in
+      h)
+         helpMe
+         ;;
+      s)
+         if [[ -z $OPTARG ]]; then
+            setSig
+         else
+            NEXT_ACTION="kill -$OPTARG "
+         fi
+         ;;
+      n)
+         if [[ -z $OPTARG ]]; then
+            setSig
+         else
+            NEXT_ACTION="kill -${SIG_SPECS[$OPTARG - 1]} "
+         fi
+         ;;
+      p)
+         PAT="$OPTARG"
+         ;;
+   esac
+done
+[[ -z $PAT ]] && setPat
+
+CONTINUE=true
+while $CONTINUE; do
+   matchProcs
+   [[ ${#PROC_IDS[@]} == 0 ]] && exit
+   TITLE='Proc selection'
+   printf '\E[1;4m%s\E[0m: ' "${TITLE}"
+   printf '\E[1;4mNext action\E[0m: %s\n' "${NEXT_ACTION}"
+   select PROMPT in "${PROC_IDS[@]}"; do
+      [[ -n $PROMPT ]] && {
+            $NEXT_ACTION "${PROMPT%% *}" # NEXT_ACTION <procid>
+            break
+      }
+      case $REPLY in #TODO: check for the existence of a list of numbers to process
+         A|ALL)
+            for proc_id in "${PROC_IDS[@]}"; do
+               $NEXT_ACTION "${proc_id%% *}"
+            done
+            break
+            ;;
+         p|pat)
+            setPat
+            ;;
+         s|sig) 
+            setSig # sets `NEXT_ACTION`
+            ;;
+         e|env)
+            NEXT_ACTION="procEnv "
+            ;;
+         r|rescan)
+            break
+            ;;
+         q|quit|exit)
+            CONTINUE=false
+            ;;
+         h|help|\?)
+            echo "Menu Options: "
+            echo "   [A]LL    : apply 'Next action' to all matching processes"
+            echo "   [p]at    : set the search pattern for processes"
+            echo "   [s]ig    : select a new signal spec to send (also sets the next action"
+            echo "   [e]nv    : set the 'Next action' to print the environment of the selected"
+            echo "              process, excluding 'LS_COLORS'"
+            echo "   [r]escan : rescan for matching processes using the same search pattern"
+            echo "   [q]uit   : quit this program"
+            ;;
+         *)
+            echo "Not a valid choice."
+            ;;
+      esac
+   break ; done
+done
+
