@@ -2,6 +2,7 @@
 PS3='>>> '
 NEXT_ACTION="kill -TERM "
 PAT=""
+KEEP_OPEN=false
 declare -a SIG_SPECS
 #get a list of signal specs
 for spec in $(kill -l); do
@@ -17,6 +18,7 @@ help() {
    echo "   -p <patern>  : Search for regex pattern <pattern>. If -p is not given, then"
    echo "                  you will be prompted for the pattern"
    echo "   -e           : Set initial action to procEnv (i.e list process environment"
+   echo "   -k           : Do not exit (keep-open) when no matching processes are found"
    echo "   -h           : Show this help"
    exit 0
 }
@@ -61,7 +63,7 @@ setSig() {
    select SIG_SPEC in "${SIG_SPECS[@]}"; do break ; done
    NEXT_ACTION="kill -${SIG_SPEC} "
 }
-while getopts ':s:n:p:eh' opt; do
+while getopts ':s:n:p:ekh' opt; do
    # make getopts handle optional arguments
    if [[ $opt == ':' ]]; then 
       opt="$OPTARG"
@@ -91,17 +93,33 @@ while getopts ':s:n:p:eh' opt; do
       e)
          NEXT_ACTION="procEnv "
          ;;
+      k)
+         KEEP_OPEN=true
+         ;;
       h)
          help
          ;;
    esac
 done
+if [[ $OPTIND -le "$#" ]]; then
+   PAT+="${!OPTIND}"
+   shift
+   while [[ $OPTIND -le "$#" ]]; do
+      PAT+=" ${!OPTIND}"
+      shift
+   done
+fi
 [[ -z $PAT ]] && setPat
 
 CONTINUE=true
 while $CONTINUE; do
    matchProcs
-   [[ ${#PROC_IDS[@]} == 0 ]] && exit
+   [[ ${#PROC_IDS[@]} == 0 ]] && {
+      if ! $KEEP_OPEN; then
+         exit
+      fi
+      PROC_IDS+=("no matching processes found, press r to rescan")
+   }
    TITLE='Proc selection'
    printf '\E[1;4m%s\E[0m: ' "${TITLE}"
    printf '\E[1;4mNext action\E[0m: %s\n' "${NEXT_ACTION}"
@@ -126,6 +144,9 @@ while $CONTINUE; do
          e|env)
             NEXT_ACTION="procEnv "
             ;;
+         k)
+            KEEP_OPEN=true
+            ;;
          r|rescan)
             break
             ;;
@@ -139,6 +160,7 @@ while $CONTINUE; do
             echo "   [s]ig    : select a new signal spec to send (also sets the next action"
             echo "   [e]nv    : set the 'Next action' to print the environment of the selected"
             echo "              process, excluding 'LS_COLORS'"
+            echo "    k       : do not exit when no matching processes are found"
             echo "   [r]escan : rescan for matching processes using the same search pattern"
             echo "   [q]uit   : quit this program"
             ;;
